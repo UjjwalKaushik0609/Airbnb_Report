@@ -1,98 +1,71 @@
-import os
-import gdown
-import joblib
-import requests
 import streamlit as st
+import pandas as pd
+import joblib
 
-# ==============================
-# Google Drive File IDs
-# ==============================
-REG_MODEL_ID = "1ENewUWOs_tiz4hZt8WUnRlcU6-naoTgu"
-CLF_MODEL_ID = "1Bh7Ig0m8ZFg4gi2zdVGJ7JtZIkkxHHRp"
-REG_FEAT_ID  = "1ajaBfSUiorYptqjjC7kKKrVFzYFHOeU-"
-CLF_FEAT_ID  = "1IwHCTMGUtmjRNI-QHd-zU9Lr7r59cWOc"
-
-
-# ==============================
-# Utility: check if update needed
-# ==============================
-def is_update_needed(file_id, local_file):
-    """Check if Google Drive file size differs from local cached file."""
-    url = f"https://drive.google.com/uc?export=download&id={file_id}"
-    try:
-        response = requests.head(url, allow_redirects=True, timeout=10)
-        gdrive_size = int(response.headers.get("Content-Length", 0))
-        local_size = os.path.getsize(local_file) if os.path.exists(local_file) else -1
-        return gdrive_size != local_size
-    except Exception:
-        return True  # if check fails, force re-download
-
-
-# ==============================
-# Utility: download from Drive
-# ==============================
-def download_from_gdrive(file_id, output=None, force=False):
-    """Download file from Google Drive if not cached or outdated."""
-    if output is None:
-        output = f"{file_id}.pkl"
-
-    if not force and os.path.exists(output) and not is_update_needed(file_id, output):
-        return output  # use cached file
-
-    url = f"https://drive.google.com/uc?id={file_id}"
-    gdown.download(url, output, quiet=False)
-    return output
-
-
-# ==============================
-# Load models (cached in Streamlit)
-# ==============================
+# ---------------------------
+# Load Models and Features
+# ---------------------------
 @st.cache_resource
 def load_models():
-    file_ids = [
-        (REG_MODEL_ID, "reg_model.pkl"),
-        (CLF_MODEL_ID, "clf_model.pkl"),
-        (REG_FEAT_ID, "reg_features.pkl"),
-        (CLF_FEAT_ID, "clf_features.pkl"),
-    ]
-
-    progress = st.progress(0, text="📥 Downloading model files...")
-    total = len(file_ids)
-
-    paths = []
-    for i, (fid, name) in enumerate(file_ids, start=1):
-        with st.spinner(f"Downloading {name}..."):
-            path = download_from_gdrive(fid, name)
-            paths.append(path)
-        progress.progress(i / total, text=f"Downloaded {i}/{total} files")
-
-    st.success("✅ All files downloaded and loaded!")
-
-    # Load objects with joblib
-    reg_model = joblib.load(paths[0])
-    clf_model = joblib.load(paths[1])
-    reg_features = joblib.load(paths[2])
-    clf_features = joblib.load(paths[3])
-
+    reg_model = joblib.load("reg_model.pkl")
+    clf_model = joblib.load("clf_model.pkl")
+    reg_features = joblib.load("reg_features.pkl")
+    clf_features = joblib.load("clf_features.pkl")
     return reg_model, clf_model, reg_features, clf_features
 
 
-# ==============================
-# Sidebar: Manual refresh option
-# ==============================
-st.sidebar.header("⚙️ Settings")
-
-if st.sidebar.button("♻️ Clear Cache & Redownload"):
-    st.cache_resource.clear()
-    st.warning("Cache cleared! Reloading models...")
-    st.rerun()
-
-
-# ==============================
-# Example usage in your app
-# ==============================
+st.set_page_config(page_title="Airbnb Report App", page_icon="🏠", layout="wide")
 st.title("🏠 Airbnb Report App")
 
 reg_model, clf_model, reg_features, clf_features = load_models()
+st.success("✅ Models are ready to use!")
 
-st.success("Models are ready to use!")
+
+# ---------------------------
+# Sidebar Inputs
+# ---------------------------
+st.sidebar.header("📌 Enter Airbnb Details")
+
+room_type = st.sidebar.selectbox("Room Type", ["Entire home/apt", "Private room", "Shared room"])
+accommodates = st.sidebar.number_input("Accommodates", 1, 16, 2)
+bathrooms = st.sidebar.number_input("Bathrooms", 0.5, 5.0, 1.0, step=0.5)
+bedrooms = st.sidebar.number_input("Bedrooms", 0, 10, 1)
+
+# ---------------------------
+# Predict Button
+# ---------------------------
+if st.sidebar.button("🔮 Predict"):
+    # Build dataframe from inputs
+    input_data = pd.DataFrame([{
+        "room_type": room_type,
+        "accommodates": accommodates,
+        "bathrooms": bathrooms,
+        "bedrooms": bedrooms
+    }])
+
+    # ---------------------------
+    # Regression Prediction
+    # ---------------------------
+    X_reg = input_data.reindex(columns=reg_features, fill_value=0)
+    price_pred = reg_model.predict(X_reg)[0]
+
+    # ---------------------------
+    # Classification Prediction
+    # ---------------------------
+    X_clf = input_data.reindex(columns=clf_features, fill_value=0)
+    demand_pred = clf_model.predict(X_clf)[0]
+    demand_label = "🔥 High Demand" if demand_pred == 1 else "❄️ Low Demand"
+
+    # ---------------------------
+    # Show Results
+    # ---------------------------
+    st.subheader("📊 Prediction Results")
+    st.metric("💰 Predicted Price", f"${price_pred:.2f}")
+    st.metric("📈 Demand Prediction", demand_label)
+
+    # ---------------------------
+    # Visualization
+    # ---------------------------
+    st.subheader("📉 Feature Overview")
+    st.bar_chart(input_data.T)
+
