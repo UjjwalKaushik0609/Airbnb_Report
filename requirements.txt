@@ -1,5 +1,9 @@
-
 streamlit
 gdown
 joblib
 requests
+scikit-learn
+pandas
+numpy
+xgboost
+lightgbm
