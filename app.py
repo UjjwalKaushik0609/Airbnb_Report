@@ -1,71 +1,28 @@
-import streamlit as st
-import pandas as pd
-import joblib
-
-# ---------------------------
-# Load Models and Features
-# ---------------------------
 @st.cache_resource
 def load_models():
-    reg_model = joblib.load("reg_model.pkl")
-    clf_model = joblib.load("clf_model.pkl")
-    reg_features = joblib.load("reg_features.pkl")
-    clf_features = joblib.load("clf_features.pkl")
+    file_ids = [
+        (REG_MODEL_ID, "reg_model.pkl.gz"),
+        (CLF_MODEL_ID, "clf_model.pkl.gz"),
+        (REG_FEAT_ID, "reg_feature.pkl"),
+        (CLF_FEAT_ID, "clf_feature.pkl"),
+    ]
+
+    progress = st.progress(0, text="📥 Downloading model files...")
+    total = len(file_ids)
+
+    paths = []
+    for i, (fid, name) in enumerate(file_ids, start=1):
+        with st.spinner(f"Downloading {name}..."):
+            path = download_from_gdrive(fid, name)
+            paths.append(path)
+        progress.progress(i / total, text=f"Downloaded {i}/{total} files")
+
+    st.success("✅ All files downloaded and loaded!")
+
+    reg_model = joblib.load(paths[0])
+    clf_model = joblib.load(paths[1])
+    reg_features = joblib.load(paths[2])
+    clf_features = joblib.load(paths[3])
+
     return reg_model, clf_model, reg_features, clf_features
-
-
-st.set_page_config(page_title="Airbnb Report App", page_icon="🏠", layout="wide")
-st.title("🏠 Airbnb Report App")
-
-reg_model, clf_model, reg_features, clf_features = load_models()
-st.success("✅ Models are ready to use!")
-
-
-# ---------------------------
-# Sidebar Inputs
-# ---------------------------
-st.sidebar.header("📌 Enter Airbnb Details")
-
-room_type = st.sidebar.selectbox("Room Type", ["Entire home/apt", "Private room", "Shared room"])
-accommodates = st.sidebar.number_input("Accommodates", 1, 16, 2)
-bathrooms = st.sidebar.number_input("Bathrooms", 0.5, 5.0, 1.0, step=0.5)
-bedrooms = st.sidebar.number_input("Bedrooms", 0, 10, 1)
-
-# ---------------------------
-# Predict Button
-# ---------------------------
-if st.sidebar.button("🔮 Predict"):
-    # Build dataframe from inputs
-    input_data = pd.DataFrame([{
-        "room_type": room_type,
-        "accommodates": accommodates,
-        "bathrooms": bathrooms,
-        "bedrooms": bedrooms
-    }])
-
-    # ---------------------------
-    # Regression Prediction
-    # ---------------------------
-    X_reg = input_data.reindex(columns=reg_features, fill_value=0)
-    price_pred = reg_model.predict(X_reg)[0]
-
-    # ---------------------------
-    # Classification Prediction
-    # ---------------------------
-    X_clf = input_data.reindex(columns=clf_features, fill_value=0)
-    demand_pred = clf_model.predict(X_clf)[0]
-    demand_label = "🔥 High Demand" if demand_pred == 1 else "❄️ Low Demand"
-
-    # ---------------------------
-    # Show Results
-    # ---------------------------
-    st.subheader("📊 Prediction Results")
-    st.metric("💰 Predicted Price", f"${price_pred:.2f}")
-    st.metric("📈 Demand Prediction", demand_label)
-
-    # ---------------------------
-    # Visualization
-    # ---------------------------
-    st.subheader("📉 Feature Overview")
-    st.bar_chart(input_data.T)
 
