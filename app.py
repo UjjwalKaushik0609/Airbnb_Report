@@ -1,59 +1,56 @@
 import streamlit as st
 import joblib
 import pandas as pd
+import numpy as np
+from huggingface_hub import hf_hub_download
 
-# -------------------------
-# Load Models + Features
-# -------------------------
-reg_pipeline = joblib.load("reg_pipeline.pkl")
-clf_pipeline = joblib.load("clf_pipeline.pkl")
-reg_features = joblib.load("reg_features.pkl")
-clf_features = joblib.load("clf_features.pkl")
+# Load models from Hugging Face
+@st.cache_resource
+def load_models():
+    # Download and cache regression pipeline
+    reg_model_path = hf_hub_download(
+        repo_id="your-username/your-repo",
+        filename="reg_pipeline.pkl"
+    )
+    reg_pipeline = joblib.load(reg_model_path)
 
-st.title("🏡 Airbnb Price & Demand Prediction App")
+    # Download and cache classification pipeline
+    clf_model_path = hf_hub_download(
+        repo_id="your-username/your-repo",
+        filename="clf_pipeline.pkl"
+    )
+    clf_pipeline = joblib.load(clf_model_path)
 
-st.markdown("Enter Airbnb listing details below to predict **price** and **demand**:")
+    return reg_pipeline, clf_pipeline
 
-# -------------------------
-# Auto-generate Input Form
-# -------------------------
-def generate_inputs(feature_list):
-    inputs = {}
-    for col in feature_list:
-        if col == "demand":  # target, skip
-            continue
-        # Guess input type
-        if "id" in col.lower() or "number" in col.lower() or "count" in col.lower():
-            inputs[col] = st.number_input(col, min_value=0, value=1)
-        elif "ratio" in col.lower() or "price" in col.lower() or "score" in col.lower():
-            inputs[col] = st.number_input(col, value=0.0)
-        elif col in ["latitude", "longitude"]:
-            inputs[col] = st.number_input(col, value=0.0, format="%.6f")
-        elif col.isnumeric():
-            inputs[col] = st.number_input(col, value=0.0)
-        else:
-            inputs[col] = st.text_input(col, "")
-    return pd.DataFrame([inputs])
 
-# Build input frame using union of regression + classification features
-all_features = sorted(set(reg_features) | set(clf_features))
-input_df = generate_inputs(all_features)
+st.title("🏠 Airbnb Price Prediction App")
 
-st.subheader("🔎 Input Preview")
-st.write(input_df)
+reg_pipeline, clf_pipeline = load_models()
 
-# -------------------------
-# Predictions
-# -------------------------
+# Example input UI
+st.header("Enter Airbnb Listing Features")
+
+room_type = st.selectbox("Room Type", ["Entire home/apt", "Private room", "Shared room", "Hotel room"])
+neighbourhood = st.text_input("Neighbourhood")
+minimum_nights = st.number_input("Minimum Nights", min_value=1, max_value=365, value=3)
+availability = st.slider("Availability 365", 0, 365, 180)
+
 if st.button("Predict"):
-    # Regression
-    X_reg = input_df.reindex(columns=reg_features, fill_value=0)
-    price_pred = reg_pipeline.predict(X_reg)[0]
+    # Example feature dict (adjust to match your feature engineering)
+    features = {
+        "room_type": room_type,
+        "neighbourhood": neighbourhood,
+        "minimum_nights": minimum_nights,
+        "availability_365": availability,
+    }
 
-    # Classification
-    X_clf = input_df.reindex(columns=clf_features, fill_value=0)
-    demand_pred = clf_pipeline.predict(X_clf)[0]
-    demand_prob = clf_pipeline.predict_proba(X_clf)[0][1]
+    # Convert to dataframe
+    input_df = pd.DataFrame([features])
 
-    st.success(f"💰 Predicted Price: **${price_pred:,.2f}**")
-    st.info(f"📈 Predicted Demand: **{'High' if demand_pred == 1 else 'Low'}** (Probability: {demand_prob:.2%})")
+    # Predict
+    price_pred = reg_pipeline.predict(input_df)[0]
+    category_pred = clf_pipeline.predict(input_df)[0]
+
+    st.success(f"💰 Predicted Price: ${price_pred:.2f}")
+    st.info(f"📊 Category: {category_pred}")
