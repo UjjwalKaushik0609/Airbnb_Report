@@ -1,56 +1,67 @@
 import streamlit as st
 import joblib
-import pandas as pd
-import numpy as np
 from huggingface_hub import hf_hub_download
 
-# Load models from Hugging Face
+# ---------------------------
+# Load Models from Hugging Face
+# ---------------------------
 @st.cache_resource
 def load_models():
-    # Download and cache regression pipeline
-    reg_model_path = hf_hub_download(
-        repo_id="your-username/your-repo",
-        filename="reg_pipeline.pkl"
-    )
-    reg_pipeline = joblib.load(reg_model_path)
+    repo_id = "UjjwalKaushik/Airbnb_model"
 
-    # Download and cache classification pipeline
-    clf_model_path = hf_hub_download(
-        repo_id="your-username/your-repo",
-        filename="clf_pipeline.pkl"
-    )
+    # Regression model
+    reg_model_path = hf_hub_download(repo_id=repo_id, filename="reg_model.pkl.gz")
+    reg_features_path = hf_hub_download(repo_id=repo_id, filename="reg_features.pkl")
+
+    # Classification model
+    clf_model_path = hf_hub_download(repo_id=repo_id, filename="clf_model.pkl.gz")
+    clf_features_path = hf_hub_download(repo_id=repo_id, filename="clf_features.pkl")
+
+    reg_pipeline = joblib.load(reg_model_path)
     clf_pipeline = joblib.load(clf_model_path)
 
-    return reg_pipeline, clf_pipeline
+    reg_features = joblib.load(reg_features_path)
+    clf_features = joblib.load(clf_features_path)
+
+    return reg_pipeline, clf_pipeline, reg_features, clf_features
 
 
-st.title("🏠 Airbnb Price Prediction App")
+# ---------------------------
+# Streamlit UI
+# ---------------------------
+st.title("🏡 Airbnb Price & Category Prediction")
+st.write("Upload Airbnb details and predict price (regression) or category (classification).")
 
-reg_pipeline, clf_pipeline = load_models()
+reg_pipeline, clf_pipeline, reg_features, clf_features = load_models()
 
-# Example input UI
-st.header("Enter Airbnb Listing Features")
+# User Input
+st.sidebar.header("Enter Airbnb Listing Details")
+room_type = st.sidebar.selectbox("Room Type", ["Entire home/apt", "Private room", "Shared room"])
+neighbourhood = st.sidebar.text_input("Neighbourhood", "Brooklyn")
+minimum_nights = st.sidebar.number_input("Minimum Nights", min_value=1, value=3)
+reviews = st.sidebar.number_input("Number of Reviews", min_value=0, value=10)
 
-room_type = st.selectbox("Room Type", ["Entire home/apt", "Private room", "Shared room", "Hotel room"])
-neighbourhood = st.text_input("Neighbourhood")
-minimum_nights = st.number_input("Minimum Nights", min_value=1, max_value=365, value=3)
-availability = st.slider("Availability 365", 0, 365, 180)
+# Convert to feature dict
+input_data = {
+    "room_type": room_type,
+    "neighbourhood": neighbourhood,
+    "minimum_nights": minimum_nights,
+    "number_of_reviews": reviews,
+}
 
-if st.button("Predict"):
-    # Example feature dict (adjust to match your feature engineering)
-    features = {
-        "room_type": room_type,
-        "neighbourhood": neighbourhood,
-        "minimum_nights": minimum_nights,
-        "availability_365": availability,
-    }
+# ---------------------------
+# Prediction Buttons
+# ---------------------------
+if st.button("🔮 Predict Price"):
+    try:
+        price = reg_pipeline.predict([input_data])[0]
+        st.success(f"💰 Estimated Price: ${price:.2f}")
+    except Exception as e:
+        st.error(f"Error in Regression Prediction: {e}")
 
-    # Convert to dataframe
-    input_df = pd.DataFrame([features])
-
-    # Predict
-    price_pred = reg_pipeline.predict(input_df)[0]
-    category_pred = clf_pipeline.predict(input_df)[0]
-
-    st.success(f"💰 Predicted Price: ${price_pred:.2f}")
-    st.info(f"📊 Category: {category_pred}")
+if st.button("🏷️ Predict Category"):
+    try:
+        category = clf_pipeline.predict([input_data])[0]
+        st.success(f"📌 Predicted Category: {category}")
+    except Exception as e:
+        st.error(f"Error in Classification Prediction: {e}")
