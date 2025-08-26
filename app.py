@@ -2,66 +2,62 @@ import streamlit as st
 import joblib
 from huggingface_hub import hf_hub_download
 
-# ---------------------------
-# Load Models from Hugging Face
-# ---------------------------
+# Hugging Face repo
+REPO_ID = "UjjwalKaushik/Airbnb_model"
+
 @st.cache_resource
 def load_models():
-    repo_id = "UjjwalKaushik/Airbnb_model"
+    try:
+        # Download files from Hugging Face
+        reg_model_path = hf_hub_download(repo_id=REPO_ID, filename="reg_model.pkl.gz")
+        reg_features_path = hf_hub_download(repo_id=REPO_ID, filename="reg_features.pkl")
+        clf_model_path = hf_hub_download(repo_id=REPO_ID, filename="clf_model.pkl.gz")
+        clf_features_path = hf_hub_download(repo_id=REPO_ID, filename="clf_features.pkl")
 
-    # Regression model
-    reg_model_path = hf_hub_download(repo_id=repo_id, filename="reg_model.pkl.gz")
-    reg_features_path = hf_hub_download(repo_id=repo_id, filename="reg_features.pkl")
+        # Load with joblib
+        reg_pipeline = joblib.load(reg_model_path)
+        clf_pipeline = joblib.load(clf_model_path)
+        reg_features = joblib.load(reg_features_path)
+        clf_features = joblib.load(clf_features_path)
 
-    # Classification model
-    clf_model_path = hf_hub_download(repo_id=repo_id, filename="clf_model.pkl.gz")
-    clf_features_path = hf_hub_download(repo_id=repo_id, filename="clf_features.pkl")
-
-    reg_pipeline = joblib.load(reg_model_path)
-    clf_pipeline = joblib.load(clf_model_path)
-
-    reg_features = joblib.load(reg_features_path)
-    clf_features = joblib.load(clf_features_path)
-
-    return reg_pipeline, clf_pipeline, reg_features, clf_features
+        return reg_pipeline, clf_pipeline, reg_features, clf_features
+    except Exception as e:
+        st.error(f"❌ Model loading failed: {e}")
+        return None, None, None, None
 
 
-# ---------------------------
-# Streamlit UI
-# ---------------------------
-st.title("🏡 Airbnb Price & Category Prediction")
-st.write("Upload Airbnb details and predict price (regression) or category (classification).")
-
+# Load models
 reg_pipeline, clf_pipeline, reg_features, clf_features = load_models()
 
-# User Input
-st.sidebar.header("Enter Airbnb Listing Details")
-room_type = st.sidebar.selectbox("Room Type", ["Entire home/apt", "Private room", "Shared room"])
-neighbourhood = st.sidebar.text_input("Neighbourhood", "Brooklyn")
-minimum_nights = st.sidebar.number_input("Minimum Nights", min_value=1, value=3)
-reviews = st.sidebar.number_input("Number of Reviews", min_value=0, value=10)
+st.title("🏡 Airbnb Price & Category Predictor")
 
-# Convert to feature dict
-input_data = {
-    "room_type": room_type,
-    "neighbourhood": neighbourhood,
-    "minimum_nights": minimum_nights,
-    "number_of_reviews": reviews,
-}
+task = st.radio("Choose Task", ["💰 Price Prediction", "🏷 Category Prediction"])
 
-# ---------------------------
-# Prediction Buttons
-# ---------------------------
-if st.button("🔮 Predict Price"):
-    try:
-        price = reg_pipeline.predict([input_data])[0]
-        st.success(f"💰 Estimated Price: ${price:.2f}")
-    except Exception as e:
-        st.error(f"Error in Regression Prediction: {e}")
+if task == "💰 Price Prediction" and reg_pipeline and reg_features is not None:
+    st.subheader("Enter Airbnb details for Price Prediction")
+    inputs = {}
+    for feat in reg_features:
+        inputs[feat] = st.text_input(f"{feat}")
 
-if st.button("🏷️ Predict Category"):
-    try:
-        category = clf_pipeline.predict([input_data])[0]
-        st.success(f"📌 Predicted Category: {category}")
-    except Exception as e:
-        st.error(f"Error in Classification Prediction: {e}")
+    if st.button("Predict Price"):
+        try:
+            X = [list(inputs.values())]
+            price = reg_pipeline.predict(X)[0]
+            st.success(f"💰 Predicted Price: ${price:.2f}")
+        except Exception as e:
+            st.error(f"Prediction failed: {e}")
+
+elif task == "🏷 Category Prediction" and clf_pipeline and clf_features is not None:
+    st.subheader("Enter Airbnb details for Category Prediction")
+    inputs = {}
+    for feat in clf_features:
+        inputs[feat] = st.text_input(f"{feat}")
+
+    if st.button("Predict Category"):
+        try:
+            X = [list(inputs.values())]
+            category = clf_pipeline.predict(X)[0]
+            st.success(f"🏷 Predicted Category: {category}")
+        except Exception as e:
+            st.error(f"Prediction failed: {e}")
+
