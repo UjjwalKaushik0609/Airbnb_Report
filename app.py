@@ -1,108 +1,59 @@
 import streamlit as st
 import joblib
 import pandas as pd
-from huggingface_hub import hf_hub_download
 
-# ==============================
-# Hugging Face Repo
-# ==============================
-HF_REPO = "UjjwalKaushik/Airbnb_model"
+# -------------------------
+# Load Models + Features
+# -------------------------
+reg_pipeline = joblib.load("reg_pipeline.pkl")
+clf_pipeline = joblib.load("clf_pipeline.pkl")
+reg_features = joblib.load("reg_features.pkl")
+clf_features = joblib.load("clf_features.pkl")
 
-# ==============================
-# Load pipelines
-# ==============================
-@st.cache_resource
-def load_models():
-    progress = st.progress(0, text="📥 Downloading pipeline files...")
-    files = ["reg_pipeline.pkl.gz", "clf_pipeline.pkl.gz"]
+st.title("🏡 Airbnb Price & Demand Prediction App")
 
-    paths = []
-    total = len(files)
-    for i, fname in enumerate(files, start=1):
-        with st.spinner(f"Downloading {fname}..."):
-            path = hf_hub_download(repo_id=HF_REPO, filename=fname)
-            paths.append(path)
-        progress.progress(i / total, text=f"Downloaded {i}/{total} files")
+st.markdown("Enter Airbnb listing details below to predict **price** and **demand**:")
 
-    st.success("✅ Pipelines loaded!")
-    reg_pipeline = joblib.load(paths[0])
-    clf_pipeline = joblib.load(paths[1])
-    return reg_pipeline, clf_pipeline
+# -------------------------
+# Auto-generate Input Form
+# -------------------------
+def generate_inputs(feature_list):
+    inputs = {}
+    for col in feature_list:
+        if col == "demand":  # target, skip
+            continue
+        # Guess input type
+        if "id" in col.lower() or "number" in col.lower() or "count" in col.lower():
+            inputs[col] = st.number_input(col, min_value=0, value=1)
+        elif "ratio" in col.lower() or "price" in col.lower() or "score" in col.lower():
+            inputs[col] = st.number_input(col, value=0.0)
+        elif col in ["latitude", "longitude"]:
+            inputs[col] = st.number_input(col, value=0.0, format="%.6f")
+        elif col.isnumeric():
+            inputs[col] = st.number_input(col, value=0.0)
+        else:
+            inputs[col] = st.text_input(col, "")
+    return pd.DataFrame([inputs])
 
+# Build input frame using union of regression + classification features
+all_features = sorted(set(reg_features) | set(clf_features))
+input_df = generate_inputs(all_features)
 
-# ==============================
-# Sidebar: Manual refresh option
-# ==============================
-st.sidebar.header("⚙️ Settings")
-if st.sidebar.button("♻️ Clear Cache & Redownload"):
-    st.cache_resource.clear()
-    st.warning("Cache cleared! Reloading...")
-    st.rerun()
+st.subheader("🔎 Input Preview")
+st.write(input_df)
 
-
-# ==============================
-# Main App
-# ==============================
-st.title("🏠 Airbnb Report App")
-
-reg_pipeline, clf_pipeline = load_models()
-
-# ==============================
-# User Input Form
-# ==============================
-st.header("📊 Make Predictions")
-st.write("Enter feature values:")
-
-user_inputs = {}
-
-col1, col2 = st.columns(2)
-
-with col1:
-    user_inputs["host_identity_verified"] = st.radio("Host identity verified?", ["Yes", "No"])
-    user_inputs["neighbourhood_group"] = st.selectbox(
-        "Neighbourhood Group", ["Brooklyn", "Manhattan", "Queens", "Bronx", "Staten Island"]
-    )
-    user_inputs["neighbourhood"] = st.text_input("Neighbourhood", "Williamsburg")
-    user_inputs["country"] = st.selectbox("Country", ["US"])
-    user_inputs["instant_bookable"] = st.radio("Instant Bookable?", ["True", "False"])
-    user_inputs["cancellation_policy"] = st.selectbox("Cancellation Policy", ["flexible", "moderate", "strict"])
-    user_inputs["room_type"] = st.selectbox(
-        "Room Type", ["Entire home/apt", "Private room", "Shared room", "Hotel room"]
-    )
-    user_inputs["house_rules"] = st.text_area("House Rules (optional)")
-    user_inputs["license"] = st.text_input("License (optional)")
-
-with col2:
-    user_inputs["latitude"] = st.slider("Latitude", -90.0, 90.0, 40.7)
-    user_inputs["longitude"] = st.slider("Longitude", -180.0, 180.0, -73.9)
-    user_inputs["construction_year"] = st.number_input("Construction Year", 1800, 2025, 2000)
-    user_inputs["price"] = st.slider("Price ($)", 0, 1000, 100)
-    user_inputs["service_fee"] = st.slider("Service Fee ($)", 0, 500, 50)
-    user_inputs["minimum_nights"] = st.slider("Minimum Nights", 1, 365, 2)
-    user_inputs["number_of_reviews"] = st.number_input("Number of Reviews", 0, 10000, 10)
-    user_inputs["reviews_per_month"] = st.number_input("Reviews per Month", 0.0, 100.0, 1.0)
-    user_inputs["review_rate_number"] = st.slider("Review Rating", 0.0, 5.0, 4.5)
-    user_inputs["availability_365"] = st.slider("Availability (days)", 0, 365, 180)
-    user_inputs["calculated_host_listings_count"] = st.number_input("Host Listings Count", 0, 1000, 1)
-    user_inputs["host_listings_ratio"] = st.number_input("Host Listings Ratio", 0.0, 100.0, 1.0)
-
-
-# ==============================
+# -------------------------
 # Predictions
-# ==============================
-if st.button("🔮 Predict"):
-    input_df = pd.DataFrame([user_inputs])   # raw values go here
+# -------------------------
+if st.button("Predict"):
+    # Regression
+    X_reg = input_df.reindex(columns=reg_features, fill_value=0)
+    price_pred = reg_pipeline.predict(X_reg)[0]
 
-    # Use pipelines (handle encoding + scaling internally)
-    reg_pred = reg_pipeline.predict(input_df)[0]
-    clf_pred = clf_pipeline.predict(input_df)[0]
+    # Classification
+    X_clf = input_df.reindex(columns=clf_features, fill_value=0)
+    demand_pred = clf_pipeline.predict(X_clf)[0]
+    demand_prob = clf_pipeline.predict_proba(X_clf)[0][1]
 
-    clf_probs = getattr(clf_pipeline, "predict_proba", lambda x: None)(input_df)
-
-    st.subheader("📌 Results")
-    st.write(f"**Predicted Price (Regression):** ${reg_pred:.2f}")
-    st.write(f"**Classification Output:** {clf_pred}")
-
-    if clf_probs is not None:
-        st.write("**Classification Probabilities:**")
-        st.json({str(label): f"{prob:.2%}" for label, prob in zip(clf_pipeline.classes_, clf_probs[0])})
+    st.success(f"💰 Predicted Price: **${price_pred:,.2f}**")
+    st.info(f"📈 Predicted Demand: **{'High' if demand_pred == 1 else 'Low'}** (Probability: {demand_prob:.2%})")
