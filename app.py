@@ -46,59 +46,48 @@ st.header("Enter Airbnb Details")
 features_to_use = reg_features if task == "💰 Price Prediction" else clf_features
 input_data = {}
 
-# Define dropdown options (static — can be loaded dynamically if dataset available)
-verified_options = ["verified", "not verified"]
-neighbourhood_group_options = ["Manhattan", "Brooklyn", "Queens", "Bronx", "Staten Island"]
-neighbourhood_options = ["Harlem", "Midtown", "Williamsburg", "Astoria", "Chelsea"]
+# --- Always show categorical dropdowns ---
+input_data["host_is_verified"] = st.selectbox("Host Verified?", ["verified", "not verified"])
+input_data["neighbourhood_group"] = st.selectbox("Neighbourhood Group", ["Manhattan", "Brooklyn", "Queens", "Bronx", "Staten Island"])
+input_data["neighbourhood"] = st.selectbox("Neighbourhood", ["Harlem", "Midtown", "Williamsburg", "Astoria", "Chelsea"])
 
-# Max listings in dataset (adjust to match training dataset)
+# Max listings in dataset (adjust if needed)
 MAX_LISTINGS = 100  
 
+# --- Other features ---
 for col in features_to_use:
 
-    # ---------- Categorical ----------
-    if col == "host_is_verified":
-        input_data[col] = st.selectbox("Host Verified?", verified_options)
+    if col in ["host_is_verified", "neighbourhood_group", "neighbourhood"]:
+        continue  # already handled above
 
-    elif col == "neighbourhood_group":
-        input_data[col] = st.selectbox("Neighbourhood Group", neighbourhood_group_options)
-
-    elif col == "neighbourhood":
-        input_data[col] = st.selectbox("Neighbourhood", neighbourhood_options)
-
-    # ---------- Numeric ----------
     elif col == "host_id":
         input_data[col] = st.number_input("Host ID", min_value=1, max_value=1000000, value=100, step=1)
 
     elif col == "latitude":
-        input_data[col] = st.slider("Latitude", -90.0, 90.0, 40.0)  # float
+        input_data[col] = st.slider("Latitude", -90.0, 90.0, 40.0)
 
     elif col == "longitude":
-        input_data[col] = st.slider("Longitude", -180.0, 180.0, -74.0)  # float
+        input_data[col] = st.slider("Longitude", -180.0, 180.0, -74.0)
 
     elif col == "construction_year":
         input_data[col] = st.number_input("Construction Year", min_value=1900, max_value=2025, value=2010, step=1)
 
     elif col == "service_fee":
-        input_data[col] = st.slider("Service Fee ($)", 0, 500, 50)  # integer
+        input_data[col] = st.slider("Service Fee ($)", 0, 500, 50)
 
     elif col == "minimum_nights":
-        input_data[col] = st.slider("Minimum Nights", 1, 365, 7)  # integer
+        input_data[col] = st.slider("Minimum Nights", 1, 365, 7)
 
     elif col == "calculated_host_listings_count":
-        input_data[col] = st.slider("Host Listings Count", 1, MAX_LISTINGS, 1)  # integer
+        input_data[col] = st.slider("Host Listings Count", 1, MAX_LISTINGS, 1)
 
     elif col == "host_listings_ratio":
-        # placeholder, will calculate later
-        input_data[col] = 0  
+        input_data[col] = 0  # placeholder
 
     else:
-        # fallback numeric (integer slider)
         input_data[col] = st.slider(col, 0, 100, 0)
 
-# -----------------
-# Calculate host_listings_ratio automatically
-# -----------------
+# --- Calculate host_listings_ratio automatically ---
 if "calculated_host_listings_count" in input_data:
     input_data["host_listings_ratio"] = input_data["calculated_host_listings_count"] / MAX_LISTINGS
 
@@ -115,7 +104,7 @@ for col in clf_features:
     if col not in user_df.columns:
         user_df[col] = 0
 
-# Debug: show user_df to verify inputs (remove later if not needed)
+# Debug: show user_df to verify inputs
 st.write("🔍 Input DataFrame:", user_df)
 
 # -----------------
@@ -130,4 +119,3 @@ if task == "💰 Price Prediction":
     if st.button("💵 Predict Price"):
         pred_price = reg_pipeline.predict(user_df[reg_features])[0]
         st.success(f"Predicted Price: ${pred_price:,.2f}")
-
