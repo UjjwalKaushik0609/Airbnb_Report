@@ -20,8 +20,10 @@ def load_dataset():
 df = load_dataset()
 
 # Extract dropdown values dynamically
-verified_options = df["host_identity_verified"].dropna().unique().tolist()
 neighbourhood_group_options = df["neighbourhood group"].dropna().unique().tolist()
+
+# Clean host verification options (only two choices)
+verified_options = ["verified", "not verified"]
 
 # -----------------
 # Load Models & Features
@@ -60,18 +62,25 @@ st.header("Enter Airbnb Details")
 features_to_use = reg_features if task == "💰 Price Prediction" else clf_features
 input_data = {}
 
-# --- Always show categorical dropdowns ---
+# --- First: Categorical Selections ---
+st.subheader("🔹 Categorical Details")
+
+# Host Verified (cleaned to only 2 options)
 input_data["host_is_verified"] = st.selectbox("Host Verified?", verified_options)
+
+# Neighbourhood Group
 input_data["neighbourhood_group"] = st.selectbox("Neighbourhood Group", neighbourhood_group_options)
 
-# Filter neighbourhoods based on group
+# Filter Neighbourhoods dynamically based on selected group
 filtered_neighbourhoods = df[df["neighbourhood group"] == input_data["neighbourhood_group"]]["neighbourhood"].dropna().unique().tolist()
 input_data["neighbourhood"] = st.selectbox("Neighbourhood", filtered_neighbourhoods)
+
+# --- Then: Numeric Inputs ---
+st.subheader("🔹 Numeric Details")
 
 # Max listings in dataset (adjust if needed)
 MAX_LISTINGS = int(df["calculated host listings count"].max())
 
-# --- Other features ---
 for col in features_to_use:
 
     if col in ["host_is_verified", "neighbourhood_group", "neighbourhood"]:
@@ -102,7 +111,6 @@ for col in features_to_use:
         input_data[col] = 0  # placeholder
 
     else:
-        # fallback numeric
         input_data[col] = st.slider(col, 0, 100, 0)
 
 # --- Calculate host_listings_ratio automatically ---
