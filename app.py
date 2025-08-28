@@ -1,26 +1,13 @@
 import streamlit as st
 import pandas as pd
+import numpy as np
 import joblib
 import requests
 import io
-import seaborn as sns
-import matplotlib.pyplot as plt
 
-st.set_page_config(page_title="Airbnb Price Prediction", layout="wide", page_icon="🏠", initial_sidebar_state="expanded")
-
-# -------------------------------
-# Load Dataset
-# -------------------------------
-@st.cache_data
-def load_data():
-    url = "https://raw.githubusercontent.com/UjjwalKaushik0609/Airbnb_Report/refs/heads/main/cleaned_dataset.csv"
-    return pd.read_csv(url)
-
-df = load_data()
-
-# -------------------------------
-# Load Models from Hugging Face
-# -------------------------------
+# ---------------------------
+# Load Models from HuggingFace
+# ---------------------------
 @st.cache_resource
 def load_model_from_hf(repo_id, filename):
     url = f"https://huggingface.co/{repo_id}/resolve/main/{filename}"
@@ -31,52 +18,77 @@ def load_model_from_hf(repo_id, filename):
 rf_model = load_model_from_hf("UjjwalKaushik/Airbnb_model", "best_random_forest.pkl")
 xgb_model = load_model_from_hf("UjjwalKaushik/Airbnb_model", "best_xgboost.pkl")
 
-# -------------------------------
-# Streamlit UI
-# -------------------------------
-st.title("🏠 Airbnb Price Prediction Dashboard (Dark Theme)")
-st.markdown("Predict prices with **Random Forest** and **XGBoost**, and explore dataset insights.")
+# ---------------------------
+# Load Dataset
+# ---------------------------
+@st.cache_data
+def load_data():
+    df = pd.read_csv("Airbnb_dataset.csv")
 
-st.sidebar.header("User Input Features")
+    # ✅ Rename columns to match training pipeline
+    df.rename(columns={
+        "NAME": "name",
+        "host id": "host_id",
+        "neighbourhood group": "neighbourhood_group",
+        "lat": "latitude",
+        "long": "longitude",
+        "country code": "country_code",
+        "room type": "room_type",
+        "Construction year": "construction_year",
+        "service fee": "service_fee",
+        "minimum nights": "minimum_nights",
+        "number of reviews": "number_of_reviews",
+        "reviews per month": "reviews_per_month",
+        "review rate number": "review_rate_number",
+        "calculated host listings count": "calculated_host_listings_count",
+        "availability 365": "availability_365"
+    }, inplace=True)
 
-# Example inputs (you can expand based on your dataset)
+    return df
+
+df = load_data()
+
+# ---------------------------
+# Streamlit App UI
+# ---------------------------
+st.title("🏡 Airbnb Price Prediction")
+st.write("This app predicts **Airbnb listing price** using Random Forest and XGBoost models.")
+
+# Sidebar inputs
+st.sidebar.header("Input Features")
+
+neighbourhood_group = st.sidebar.selectbox("Neighbourhood Group", df["neighbourhood_group"].unique())
 room_type = st.sidebar.selectbox("Room Type", df["room_type"].unique())
-neighbourhood = st.sidebar.selectbox("Neighbourhood", df["neighbourhood"].unique())
-minimum_nights = st.sidebar.slider("Minimum Nights", 1, 30, 1)
-number_of_reviews = st.sidebar.slider("Number of Reviews", 0, 500, 10)
+minimum_nights = st.sidebar.number_input("Minimum Nights", min_value=1, max_value=500, value=3)
+number_of_reviews = st.sidebar.number_input("Number of Reviews", min_value=0, max_value=1000, value=10)
+reviews_per_month = st.sidebar.number_input("Reviews per Month", min_value=0.0, max_value=30.0, value=1.0)
+availability_365 = st.sidebar.number_input("Availability (days)", min_value=0, max_value=365, value=180)
 
-# Prepare input DataFrame
+# ---------------------------
+# Prepare Input for Prediction
+# ---------------------------
 input_data = pd.DataFrame({
+    "neighbourhood_group": [neighbourhood_group],
     "room_type": [room_type],
-    "neighbourhood": [neighbourhood],
     "minimum_nights": [minimum_nights],
-    "number_of_reviews": [number_of_reviews]
+    "number_of_reviews": [number_of_reviews],
+    "reviews_per_month": [reviews_per_month],
+    "availability_365": [availability_365]
 })
 
-# Predict
-if st.button("🔮 Predict Price"):
-    rf_pred = rf_model.predict(input_data)[0]
-    xgb_pred = xgb_model.predict(input_data)[0]
+# ---------------------------
+# Make Predictions
+# ---------------------------
+rf_pred = rf_model.predict(input_data)[0]
+xgb_pred = xgb_model.predict(input_data)[0]
 
-    st.success(f"**Random Forest Prediction:** ${rf_pred:.2f}")
-    st.info(f"**XGBoost Prediction:** ${xgb_pred:.2f}")
+# ---------------------------
+# Show Results
+# ---------------------------
+st.subheader("💡 Predicted Price")
+st.write(f"🌲 Random Forest Prediction: **${rf_pred:.2f}**")
+st.write(f"🚀 XGBoost Prediction: **${xgb_pred:.2f}**")
 
-# -------------------------------
-# Data Visualizations
-# -------------------------------
-st.subheader("📊 Dataset Insights")
+st.markdown("---")
+st.caption("Built with Streamlit, scikit-learn & XGBoost")
 
-col1, col2 = st.columns(2)
-
-with col1:
-    st.write("### Average Price by Room Type")
-    fig, ax = plt.subplots()
-    sns.barplot(data=df, x="room_type", y="price", ax=ax, palette="Blues_d")
-    st.pyplot(fig)
-
-with col2:
-    st.write("### Average Price by Neighbourhood")
-    fig, ax = plt.subplots(figsize=(6,4))
-    top_neigh = df.groupby("neighbourhood")["price"].mean().sort_values(ascending=False).head(10)
-    sns.barplot(x=top_neigh.values, y=top_neigh.index, ax=ax, palette="Greens_d")
-    st.pyplot(fig)
