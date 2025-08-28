@@ -1,9 +1,9 @@
 streamlit
 pandas
 numpy
-scikit-learn
+scikit-learn==1.3.2
 xgboost
+joblib
 matplotlib
 seaborn
-joblib
-requests
+huggingface_hub
