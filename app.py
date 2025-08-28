@@ -2,84 +2,95 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import joblib
-import requests
-import io
+import matplotlib.pyplot as plt
+import seaborn as sns
 
-# ------------------------------
+# =========================
 # Load dataset
-# ------------------------------
+# =========================
 @st.cache_data
 def load_data():
     df = pd.read_csv("cleaned_dataset.csv")
-    # Standardize column names (match training pipeline)
-    df.columns = [c.strip().lower().replace(" ", "_") for c in df.columns]
     return df
 
-# ------------------------------
-# Load model from Hugging Face
-# ------------------------------
+# =========================
+# Load models
+# =========================
 @st.cache_resource
-def load_model_from_hf(repo_id, filename):
-    url = f"https://huggingface.co/{repo_id}/resolve/main/{filename}"
-    response = requests.get(url)
-    if response.status_code == 200:
-        return joblib.load(io.BytesIO(response.content))
-    else:
-        st.error(f"Error loading model: {response.status_code}")
-        return None
+def load_model(model_name):
+    if model_name == "Random Forest":
+        return joblib.load("best_random_forest.pkl")
+    elif model_name == "XGBoost":
+        return joblib.load("best_xgboost.pkl")
 
-# ------------------------------
-# App
-# ------------------------------
-st.title("🏡 Airbnb Price Prediction Dashboard")
+# =========================
+# Streamlit App
+# =========================
+st.set_page_config(page_title="Airbnb Price Predictor", layout="wide")
 
+st.title("🏠 Airbnb Price Prediction Dashboard")
+
+# Load dataset
 df = load_data()
 
-# Load models
-rf_model = load_model_from_hf("UjjwalKaushik/Airbnb_model", "best_random_forest.pkl")
-xgb_model = load_model_from_hf("UjjwalKaushik/Airbnb_model", "best_xgboost.pkl")
-
 # Sidebar filters
-st.sidebar.header("Filter Options")
+st.sidebar.header("🔍 Input Features")
 
-room_type = st.sidebar.selectbox("Room Type", df["room_type"].unique())
-neighbourhood_group = st.sidebar.selectbox("Neighbourhood Group", df["neighbourhood_group"].unique())
-minimum_nights = st.sidebar.slider("Minimum Nights", 1, 30, 3)
-number_of_reviews = st.sidebar.slider("Number of Reviews", 0, 500, 10)
+# Model choice
+model_choice = st.sidebar.selectbox("Choose Model", ["Random Forest", "XGBoost"])
+model = load_model(model_choice)
 
-# Prepare input data
-input_data = pd.DataFrame({
-    "room_type": [room_type],
-    "neighbourhood_group": [neighbourhood_group],
-    "minimum_nights": [minimum_nights],
-    "number_of_reviews": [number_of_reviews]
-})
+# Feature inputs (use same columns used in training)
+room_type = st.sidebar.selectbox("Room Type", df["room type"].unique())
+neighbourhood_group = st.sidebar.selectbox("Neighbourhood Group", df["neighbourhood group"].unique())
+neighbourhood = st.sidebar.selectbox("Neighbourhood", df["neighbourhood"].unique())
+minimum_nights = st.sidebar.number_input("Minimum Nights", min_value=1, max_value=100, value=3)
+number_of_reviews = st.sidebar.number_input("Number of Reviews", min_value=0, value=10)
+reviews_per_month = st.sidebar.number_input("Reviews per Month", min_value=0.0, value=1.0, step=0.1)
+availability_365 = st.sidebar.number_input("Availability (days)", min_value=0, max_value=365, value=180)
 
-# ✅ Ensure input_data has all features model expects
-if rf_model is not None:
-    expected_cols = rf_model.feature_names_in_
-    for col in expected_cols:
-        if col not in input_data.columns:
-            input_data[col] = 0  # fill missing features with default
-    input_data = input_data[expected_cols]  # reorder to match training
+# =========================
+# Prediction
+# =========================
+if st.sidebar.button("Predict Price"):
+    try:
+        # Prepare input
+        input_dict = {
+            "room type": [room_type],
+            "neighbourhood group": [neighbourhood_group],
+            "neighbourhood": [neighbourhood],
+            "minimum nights": [minimum_nights],
+            "number of reviews": [number_of_reviews],
+            "reviews per month": [reviews_per_month],
+            "availability 365": [availability_365],
+        }
 
-    rf_pred = rf_model.predict(input_data)[0]
-    st.subheader("Random Forest Prediction")
-    st.write(f"💰 Predicted Price: **${rf_pred:.2f}**")
+        input_df = pd.DataFrame(input_dict)
 
-if xgb_model is not None:
-    expected_cols = xgb_model.feature_names_in_
-    for col in expected_cols:
-        if col not in input_data.columns:
-            input_data[col] = 0
-    input_data = input_data[expected_cols]
+        # Ensure categories align with training
+        for col in ["room type", "neighbourhood group", "neighbourhood"]:
+            input_df[col] = input_df[col].astype(str)
 
-    xgb_pred = xgb_model.predict(input_data)[0]
-    st.subheader("XGBoost Prediction")
-    st.write(f"💰 Predicted Price: **${xgb_pred:.2f}**")
+        # Prediction
+        pred = model.predict(input_df)[0]
+        st.success(f"💰 Predicted Price: **${pred:.2f}** using {model_choice}")
 
-# ------------------------------
-# Dataset Preview
-# ------------------------------
-st.subheader("Dataset Preview")
-st.dataframe(df.head())
+    except Exception as e:
+        st.error(f"⚠️ Error during prediction: {e}")
+
+# =========================
+# Data Preview & Visualization
+# =========================
+st.subheader("📊 Dataset Preview")
+st.write(df.head())
+
+# Simple visualization
+st.subheader("Room Type Distribution")
+fig, ax = plt.subplots()
+sns.countplot(data=df, x="room type", ax=ax)
+st.pyplot(fig)
+
+st.subheader("Price Distribution by Neighbourhood Group")
+fig, ax = plt.subplots()
+sns.boxplot(data=df, x="neighbourhood group", y="price", ax=ax)
+st.pyplot(fig)
