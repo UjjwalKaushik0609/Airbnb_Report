@@ -8,7 +8,7 @@ from huggingface_hub import hf_hub_download
 # -------------------------------
 @st.cache_data
 def load_data():
-    url = "https://raw.githubusercontent.com/UjjwalKaushik/Airbnb_model/main/airbnb_clean.csv"
+    url = "https://raw.githubusercontent.com/UjjwalKaushik0609/Airbnb_Report/refs/heads/main/cleaned_dataset.csv"
     return pd.read_csv(url)
 
 df = load_data()
