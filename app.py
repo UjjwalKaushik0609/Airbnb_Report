@@ -23,7 +23,7 @@ xgb_model = load_model_from_hf("UjjwalKaushik/Airbnb_model", "best_xgboost.pkl")
 # ---------------------------
 @st.cache_data
 def load_data():
-    df = pd.read_csv("Airbnb_dataset.csv")
+    df = pd.read_csv("cleaned_dataset.csv")
 
     # ✅ Rename columns to match training pipeline
     df.rename(columns={
