@@ -8,7 +8,7 @@ import os
 # -------------------
 @st.cache_data
 def load_data():
-    url = "https://raw.githubusercontent.com/<your-username>/<your-repo>/main/cleaned_dataset.csv"
+    url = "https://raw.githubusercontent.com/UjjwalKaushik0609/Airbnb_Report/refs/heads/main/cleaned_dataset.csv"
     df = pd.read_csv(url)
 
     # Keep only relevant columns
