@@ -13,7 +13,7 @@ st.set_page_config(page_title="Airbnb Price Prediction", layout="wide", page_ico
 # -------------------------------
 @st.cache_data
 def load_data():
-    url = "https://raw.githubusercontent.com/UjjwalKaushik/airbnb_report/main/cleaned_dataset.csv"
+    url = "https://raw.githubusercontent.com/UjjwalKaushik0609/Airbnb_Report/refs/heads/main/cleaned_dataset.csv"
     return pd.read_csv(url)
 
 df = load_data()
