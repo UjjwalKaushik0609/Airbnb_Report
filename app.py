@@ -1,24 +1,37 @@
 import streamlit as st
 import pandas as pd
 import joblib
+import os
 
 # -------------------
-# Load Data
+# Load Data from GitHub
 # -------------------
 @st.cache_data
 def load_data():
-    df = pd.read_csv("cleaned_dataset.csv")
+    url = "https://raw.githubusercontent.com/<your-username>/<your-repo>/main/cleaned_dataset.csv"
+    df = pd.read_csv(url)
+
+    # Keep only relevant columns
+    df = df[[
+        "neighbourhood group", "neighbourhood", "room type", 
+        "minimum nights", "number of reviews", "reviews per month",
+        "calculated host listings count", "availability 365",
+        "host_identity_verified", "instant_bookable", "Construction year", "price"
+    ]]
     return df
 
 df = load_data()
 
 # -------------------
-# Load Models
+# Load Models from HF
 # -------------------
 @st.cache_resource
 def load_models():
-    rf_model = joblib.load("best_random_forest.pkl")
-    xgb_model = joblib.load("best_xgboost.pkl")
+    rf_path = os.path.join(os.path.dirname(__file__), "best_random_forest.pkl")
+    xgb_path = os.path.join(os.path.dirname(__file__), "best_xgboost.pkl")
+
+    rf_model = joblib.load(rf_path)
+    xgb_model = joblib.load(xgb_path)
     return rf_model, xgb_model
 
 rf_model, xgb_model = load_models()
@@ -31,7 +44,7 @@ def user_input(df):
 
     model_choice = st.sidebar.selectbox("Select Model", ["Random Forest", "XGBoost"])
 
-    # Correct column names from dataset
+    # Correct names from dataset
     neighbourhood_group = st.sidebar.selectbox("Neighbourhood Group", df["neighbourhood group"].unique())
     neighbourhoods = df[df["neighbourhood group"] == neighbourhood_group]["neighbourhood"].unique()
     neighbourhood = st.sidebar.selectbox("Neighbourhood", neighbourhoods)
