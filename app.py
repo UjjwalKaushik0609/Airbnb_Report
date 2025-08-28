@@ -1,125 +1,82 @@
 import streamlit as st
 import pandas as pd
 import joblib
-import requests
-import io
-import matplotlib.pyplot as plt
-import seaborn as sns
 
-# ----------------------------
-# Load Dataset (for dropdowns + visualization)
-# ----------------------------
+# ===============================
+# Load dataset & model
+# ===============================
 @st.cache_data
 def load_data():
-    return pd.read_csv("cleaned_dataset.csv")
+    df = pd.read_csv("cleaned_dataset.csv")
+    return df
 
-df = load_data()
-
-# ----------------------------
-# Load Model from Hugging Face
-# ----------------------------
 @st.cache_resource
 def load_model():
-    url = "https://huggingface.co/UjjwalKaushik/Airbnb_model/resolve/main/best_random_forest.pkl"
-    r = requests.get(url)
-    r.raise_for_status()
-    return joblib.load(io.BytesIO(r.content))
+    return joblib.load("model.pkl")
 
+df = load_data()
 model = load_model()
 
-# ----------------------------
-# App Layout
-# ----------------------------
-st.title("🏠 Airbnb Price Prediction App")
-st.write("Predict **Total Price** of a listing based on input features.")
-
-# ----------------------------
-# User Input Section
-# ----------------------------
-st.sidebar.header("Enter Listing Details")
-
+# ===============================
+# Sidebar input function
+# ===============================
 def user_input():
     data = {}
-    
-    # Dropdowns for categorical features
-    data['neighbourhood group'] = st.sidebar.selectbox("Neighbourhood Group", df['neighbourhood group'].unique())
-    data['neighbourhood'] = st.sidebar.selectbox("Neighbourhood", df['neighbourhood'].unique())
-    data['country'] = st.sidebar.selectbox("Country", df['country'].unique())
-    data['country code'] = st.sidebar.selectbox("Country Code", df['country code'].unique())
-    data['cancellation_policy'] = st.sidebar.selectbox("Cancellation Policy", df['cancellation_policy'].unique())
-    data['room type'] = st.sidebar.selectbox("Room Type", df['room type'].unique())
 
-    # Sliders for numerical features
-    for col in ['lat','long','Construction year','service fee','minimum nights',
-                'number of reviews','reviews per month','review rate number',
-                'calculated host listings count','availability 365',
-                'last_review_year','last_review_month']:
+    # --- Neighbourhood Group & Neighbourhood ---
+    neighbourhood_group = st.sidebar.selectbox("Neighbourhood Group", df["neighbourhood group"].unique())
+    neighbourhood_options = df[df["neighbourhood group"] == neighbourhood_group]["neighbourhood"].unique()
+    neighbourhood = st.sidebar.selectbox("Neighbourhood", neighbourhood_options)
+
+    data["neighbourhood group"] = neighbourhood_group
+    data["neighbourhood"] = neighbourhood
+
+    # --- Other categorical features ---
+    data["country"] = st.sidebar.selectbox("Country", df["country"].unique())
+    data["country code"] = st.sidebar.selectbox("Country Code", df["country code"].unique())
+    data["cancellation_policy"] = st.sidebar.selectbox("Cancellation Policy", df["cancellation_policy"].unique())
+    data["room type"] = st.sidebar.selectbox("Room Type", df["room type"].unique())
+
+    # --- Boolean categorical (True/False) ---
+    data["host_identity_verified"] = st.sidebar.selectbox("Host Identity Verified", [True, False])
+    data["instant_bookable"] = st.sidebar.selectbox("Instant Bookable", [True, False])
+
+    # --- Numerical features ---
+    for col in ["lat", "long", "Construction year", "service fee", "minimum nights",
+                "number of reviews", "reviews per month", "review rate number",
+                "calculated host listings count", "availability 365"]:
         min_val = float(df[col].min())
         max_val = float(df[col].max())
-        default_val = float(df[col].median())
-        data[col] = st.sidebar.slider(col, min_val, max_val, default_val)
+        default_val = float(df[col].mean())
+        data[col] = st.sidebar.slider(f"{col}", min_val, max_val, default_val)
 
-    # Binary categorical encoded as 0/1
-    data['host_identity_verified'] = st.sidebar.selectbox("Host Identity Verified", ["t", "f"])
-    data['instant_bookable'] = st.sidebar.selectbox("Instant Bookable", ["t", "f"])
+    # --- Special cases ---
+    # Year dropdown
+    year_min = int(df["last_review_year"].min())
+    year_max = int(df["last_review_year"].max())
+    data["last_review_year"] = st.sidebar.selectbox("Last Review Year", list(range(year_min, year_max + 1)))
 
-    # Convert to numeric
-    data['host_identity_verified'] = 1 if data['host_identity_verified'] == "t" else 0
-    data['instant_bookable'] = 1 if data['instant_bookable'] == "t" else 0
-    
+    # Month dropdown (1–12)
+    data["last_review_month"] = st.sidebar.selectbox("Last Review Month", list(range(1, 13)))
+
+    # Price
+    price_min = float(df["price"].min())
+    price_max = float(df["price"].max())
+    price_default = float(df["price"].mean())
+    data["price"] = st.sidebar.slider("Price", price_min, price_max, price_default)
+
     return pd.DataFrame([data])
+
+# ===============================
+# Main App
+# ===============================
+st.title("🏠 Airbnb Price Prediction")
 
 input_data = user_input()
 
-# ----------------------------
-# Prediction
-# ----------------------------
 try:
     prediction = model.predict(input_data)[0]
-    st.subheader("💰 Predicted Total Price")
-    st.success(f"${prediction:,.2f}")
+    st.success(f"💰 Predicted Total Price: **${prediction:.2f}**")
 except Exception as e:
     st.error(f"Error making prediction: {e}")
-
-# ----------------------------
-# Visualization
-# ----------------------------
-st.subheader("📊 Price Distribution by Room Type")
-selected_room = input_data['room type'].values[0]
-
-fig, ax = plt.subplots()
-sns.set_style("darkgrid")   # better for dark mode
-sns.histplot(df[df['room type'] == selected_room]['total_cost'], bins=30, kde=True, ax=ax, color="#00C9A7")
-ax.set_title(f"Distribution of Total Price for {selected_room}", color="white")
-ax.set_xlabel("Total Price", color="white")
-ax.set_ylabel("Frequency", color="white")
-ax.tick_params(colors="white")
-st.pyplot(fig)
-
-# ----------------------------
-# Feature Importance
-# ----------------------------
-st.subheader("📈 Feature Importance")
-
-if hasattr(model, "named_steps"):
-    # If model is a pipeline, get the model inside
-    final_model = model.named_steps.get("randomforestregressor", model)
-else:
-    final_model = model
-
-if hasattr(final_model, "feature_importances_"):
-    importances = final_model.feature_importances_
-    feature_names = input_data.columns
-    importance_df = pd.DataFrame({"feature": feature_names, "importance": importances})
-    importance_df = importance_df.sort_values(by="importance", ascending=False).head(10)
-
-    fig, ax = plt.subplots()
-    sns.barplot(data=importance_df, x="importance", y="feature", ax=ax, palette="viridis")
-    ax.set_title("Top 10 Important Features", color="white")
-    ax.set_xlabel("Importance", color="white")
-    ax.set_ylabel("Feature", color="white")
-    ax.tick_params(colors="white")
-    st.pyplot(fig)
-else:
-    st.info("This model does not provide feature importances.")
 
