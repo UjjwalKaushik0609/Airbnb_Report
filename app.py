@@ -3,82 +3,99 @@ import pandas as pd
 import joblib
 from huggingface_hub import hf_hub_download
 
-# -------------------------------
-# Load Model Function
-# -------------------------------
+# ---------------------------
+# Load trained model
+# ---------------------------
 @st.cache_resource
-def load_model(model_choice):
-    filename = "best_random_forest.pkl" if model_choice == "Random Forest" else "best_xgboost.pkl"
+def load_model():
     model_path = hf_hub_download(
         repo_id="UjjwalKaushik/Airbnb_model",
-        filename=filename
+        filename="airbnb_model.pkl"
     )
     return joblib.load(model_path)
 
-# -------------------------------
-# Load Dataset for dropdown values
-# -------------------------------
+model = load_model()
+
+# ---------------------------
+# Load dataset (for options)
+# ---------------------------
 @st.cache_data
 def load_data():
-    df = pd.read_csv("cleaned_dataset.csv")  # keep this in repo
-    return df
+    return pd.read_csv("cleaned_dataset.csv")
 
 df = load_data()
 
-# -------------------------------
-# Sidebar - Model Selection
-# -------------------------------
-st.sidebar.header("🔧 Settings")
-model_choice = st.sidebar.radio("Choose Model", ["Random Forest", "XGBoost"])
-model = load_model(model_choice)
-
-# -------------------------------
-# Sidebar - User Inputs
-# -------------------------------
-st.sidebar.header("📌 Input Features")
-
+# ---------------------------
+# Sidebar Input Function
+# ---------------------------
 def user_input():
     data = {}
 
-    # Neighbourhood Group & Neighbourhood
-    neighbourhood_group = st.sidebar.selectbox("Neighbourhood Group", df["neighbourhood_group"].unique())
-    neighbourhoods = df[df["neighbourhood_group"] == neighbourhood_group]["neighbourhood"].unique()
-    neighbourhood = st.sidebar.selectbox("Neighbourhood", sorted(neighbourhoods))
+    # 🔹 Host Identity Verified (True/False)
+    data["host_identity_verified"] = st.sidebar.selectbox(
+        "Host Identity Verified", [True, False]
+    )
 
-    # Numeric sliders
-    data['calculated_host_listings_count'] = st.sidebar.slider("Calculated Host Listings Count", 0, 50, 1)
-    data['availability_365'] = st.sidebar.slider("Availability (days per year)", 0, 365, 100)
+    # 🔹 Instant Bookable (True/False)
+    data["instant_bookable"] = st.sidebar.selectbox(
+        "Instant Bookable", [True, False]
+    )
 
-    # Year dropdown
-    years = sorted(df["last_review_year"].dropna().unique())
-    data['last_review_year'] = st.sidebar.selectbox("Last Review Year", years)
-    data['last_review_month'] = st.sidebar.slider("Last Review Month", 1, 12, 6)
+    # 🔹 Neighbourhood Group
+    neighbourhood_group = st.sidebar.selectbox(
+        "Neighbourhood Group", df["neighbourhood group"].unique()
+    )
 
-    # Booleans
-    data['host_identity_verified'] = st.sidebar.selectbox("Host Identity Verified", [True, False])
-    data['instant_bookable'] = st.sidebar.selectbox("Instant Bookable", [True, False])
+    # 🔹 Neighbourhood (filtered by group)
+    filtered_neighbourhoods = df[df["neighbourhood group"] == neighbourhood_group]["neighbourhood"].unique()
+    data["neighbourhood group"] = neighbourhood_group
+    data["neighbourhood"] = st.sidebar.selectbox("Neighbourhood", filtered_neighbourhoods)
 
-    # Store categorical
-    data['neighbourhood_group'] = neighbourhood_group
-    data['neighbourhood'] = neighbourhood
+    # 🔹 Country
+    data["country"] = st.sidebar.selectbox("Country", df["country"].unique())
+
+    # 🔹 Country Code
+    data["country code"] = st.sidebar.selectbox("Country Code", df["country code"].unique())
+
+    # 🔹 Cancellation Policy
+    data["cancellation_policy"] = st.sidebar.selectbox("Cancellation Policy", df["cancellation_policy"].unique())
+
+    # 🔹 Room Type
+    data["room type"] = st.sidebar.selectbox("Room Type", df["room type"].unique())
+
+    # 🔹 Construction Year (dropdown)
+    years = list(range(int(df["Construction year"].min()), int(df["Construction year"].max()) + 1))
+    data["Construction year"] = st.sidebar.selectbox("Construction Year", years)
+
+    # 🔹 Other numerical features with sliders
+    numerical = [
+        'lat', 'long', 'service fee', 'minimum nights',
+        'number of reviews', 'reviews per month', 'review rate number',
+        'calculated host listings count', 'availability 365',
+        'last_review_year', 'last_review_month'
+    ]
+
+    for col in numerical:
+        min_val = float(df[col].min())
+        max_val = float(df[col].max())
+        default_val = float(df[col].mean())
+        data[col] = st.sidebar.slider(f"{col}", min_val, max_val, default_val)
 
     return pd.DataFrame([data])
 
+# ---------------------------
+# Streamlit App
+# ---------------------------
+st.title("🏡 Airbnb Price Prediction")
+st.write("Fill in the details in the sidebar to predict the Airbnb listing price.")
+
+# Get input
 input_data = user_input()
 
-# -------------------------------
 # Prediction
-# -------------------------------
-st.subheader("🎯 Predicted Price")
 try:
     prediction = model.predict(input_data)[0]
-    st.success(f"💰 Estimated Price: **${prediction:.2f}**")
+    st.subheader("💰 Predicted Price:")
+    st.success(f"${prediction:,.2f}")
 except Exception as e:
     st.error(f"Error making prediction: {e}")
-
-# -------------------------------
-# Visualization
-# -------------------------------
-st.subheader("📊 Data Overview")
-st.write("Sample of dataset:")
-st.dataframe(df.head(10))
