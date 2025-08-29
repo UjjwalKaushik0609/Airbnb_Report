@@ -1,148 +1,159 @@
 import streamlit as st
 import pandas as pd
 import joblib
-from huggingface_hub import hf_hub_download
+import requests
+import io
 
-# -----------------------------
+# -------------------------------
 # Load dataset from GitHub
-# -----------------------------
+# -------------------------------
 @st.cache_data
 def load_data():
     url = "https://raw.githubusercontent.com/UjjwalKaushik0609/Airbnb_Report/refs/heads/main/cleaned_dataset.csv"
     df = pd.read_csv(url)
     return df
 
-# -----------------------------
+# -------------------------------
 # Load models from Hugging Face
-# -----------------------------
+# -------------------------------
 @st.cache_resource
 def load_models():
-    repo_id = "UjjwalKaushik/Airbnb_model"
+    # Replace with your Hugging Face repo details
+    rf_url = "https://huggingface.co/<your-username>/<your-hf-repo>/resolve/main/best_random_forest.pkl"
+    xgb_url = "https://huggingface.co/<your-username>/<your-hf-repo>/resolve/main/best_xgboost.pkl"
 
-    rf_path = hf_hub_download(repo_id=repo_id, filename="best_random_forest.pkl")
-    xgb_path = hf_hub_download(repo_id=repo_id, filename="best_xgboost.pkl")
-
-    rf_model = joblib.load(rf_path)
-    xgb_model = joblib.load(xgb_path)
-
+    rf_model = joblib.load(io.BytesIO(requests.get(rf_url).content))
+    xgb_model = joblib.load(io.BytesIO(requests.get(xgb_url).content))
     return rf_model, xgb_model
 
-# -----------------------------
-# Sidebar User Input
-# -----------------------------
+# -------------------------------
+# Collect user input
+# -------------------------------
 def user_input(df):
-    st.sidebar.header("Input Features")
+    st.sidebar.header("Enter Airbnb Details")
 
-    # Model selection
-    model_choice = st.sidebar.selectbox("Select Model", ["Random Forest", "XGBoost"])
+    # Host identity verified
+    host_identity_verified = st.sidebar.selectbox("Host Identity Verified", ["Yes", "No"])
 
-    # Host identity verified (True/False)
-    host_identity_verified = st.sidebar.selectbox(
-        "Host Identity Verified", ["t", "f"]
-    )
+    # Instant bookable
+    instant_bookable = st.sidebar.selectbox("Instant Bookable", ["Yes", "No"])
 
-    # Instant bookable (True/False)
-    instant_bookable = st.sidebar.selectbox(
-        "Instant Bookable", ["t", "f"]
-    )
+    # Neighbourhood group
+    neighbourhood_group = st.sidebar.selectbox("Neighbourhood Group", df["neighbourhood group"].unique())
 
-    # Neighbourhood Group
-    neighbourhood_group = st.sidebar.selectbox(
-        "Neighbourhood Group", df["neighbourhood group"].unique()
-    )
-
-    # Filtered Neighbourhoods
-    neighbourhood = st.sidebar.selectbox(
-        "Neighbourhood",
-        df[df["neighbourhood group"] == neighbourhood_group]["neighbourhood"].unique(),
-    )
+    # Filtered neighbourhoods
+    neighbourhoods = df[df["neighbourhood group"] == neighbourhood_group]["neighbourhood"].unique()
+    neighbourhood = st.sidebar.selectbox("Neighbourhood", neighbourhoods)
 
     # Country
     country = st.sidebar.selectbox("Country", df["country"].unique())
 
     # Cancellation Policy
-    cancellation_policy = st.sidebar.selectbox(
-        "Cancellation Policy", df["cancellation_policy"].unique()
-    )
+    cancellation_policy = st.sidebar.selectbox("Cancellation Policy", df["cancellation_policy"].unique())
 
     # Room Type
     room_type = st.sidebar.selectbox("Room Type", df["room type"].unique())
 
     # Construction Year
-    construction_year = st.sidebar.number_input(
-        "Construction Year", int(df["Construction year"].min()), int(df["Construction year"].max()), 2000
-    )
+    min_year, max_year = int(df["Construction year"].min()), int(df["Construction year"].max())
+    default_year = int(df["Construction year"].median())
+    construction_year = st.sidebar.number_input("Construction Year", min_value=min_year, max_value=max_year, value=default_year)
 
     # Service Fee
-    service_fee = st.sidebar.number_input("Service Fee", 0, 500, 50)
+    min_fee, max_fee = int(df["service fee"].min()), int(df["service fee"].max())
+    default_fee = int(df["service fee"].median())
+    service_fee = st.sidebar.number_input("Service Fee", min_value=min_fee, max_value=max_fee, value=default_fee)
 
     # Minimum Nights
-    minimum_nights = st.sidebar.number_input("Minimum Nights", 1, 365, 1)
+    min_nights, max_nights = int(df["minimum nights"].min()), int(df["minimum nights"].max())
+    default_nights = int(df["minimum nights"].median())
+    minimum_nights = st.sidebar.number_input("Minimum Nights", min_value=min_nights, max_value=max_nights, value=default_nights)
 
-    # Reviews
-    number_of_reviews = st.sidebar.number_input("Number of Reviews", 0, 1000, 10)
-    reviews_per_month = st.sidebar.number_input("Reviews per Month", 0.0, 30.0, 1.0)
-    review_rate_number = st.sidebar.number_input("Review Rate Number", 0, 10, 5)
+    # Number of Reviews
+    min_reviews, max_reviews = int(df["number of reviews"].min()), int(df["number of reviews"].max())
+    default_reviews = int(df["number of reviews"].median())
+    number_of_reviews = st.sidebar.number_input("Number of Reviews", min_value=min_reviews, max_value=max_reviews, value=default_reviews)
+
+    # Reviews per Month
+    min_rpm, max_rpm = float(df["reviews per month"].min()), float(df["reviews per month"].max())
+    default_rpm = float(df["reviews per month"].median())
+    reviews_per_month = st.sidebar.number_input("Reviews per Month", min_value=min_rpm, max_value=max_rpm, value=default_rpm)
+
+    # Review Rate Number
+    min_rrn, max_rrn = int(df["review rate number"].min()), int(df["review rate number"].max())
+    default_rrn = int(df["review rate number"].median())
+    review_rate_number = st.sidebar.number_input("Review Rate Number", min_value=min_rrn, max_value=max_rrn, value=default_rrn)
 
     # Host Listings Count
-    calculated_host_listings_count = st.sidebar.number_input(
-        "Host Listings Count", 0, 50, 1
-    )
+    min_list, max_list = int(df["calculated host listings count"].min()), int(df["calculated host listings count"].max())
+    default_list = int(df["calculated host listings count"].median())
+    calculated_host_listings_count = st.sidebar.number_input("Host Listings Count", min_value=min_list, max_value=max_list, value=default_list)
 
     # Availability
-    availability_365 = st.sidebar.number_input("Availability (days per year)", 0, 365, 180)
+    min_avail, max_avail = int(df["availability 365"].min()), int(df["availability 365"].max())
+    default_avail = int(df["availability 365"].median())
+    availability_365 = st.sidebar.number_input("Availability (days per year)", min_value=min_avail, max_value=max_avail, value=default_avail)
 
-    # Last Review Year / Month
-    last_review_year = st.sidebar.selectbox(
-        "Last Review Year", sorted(df["last_review_year"].dropna().unique())
-    )
-    last_review_month = st.sidebar.selectbox(
-        "Last Review Month", sorted(df["last_review_month"].dropna().unique())
-    )
+    # Latitude
+    min_lat, max_lat = float(df["lat"].min()), float(df["lat"].max())
+    default_lat = float(df["lat"].median())
+    lat = st.sidebar.number_input("Latitude", min_value=min_lat, max_value=max_lat, value=default_lat)
 
-    # Lat/Long
-    lat = st.sidebar.number_input("Latitude", float(df["lat"].min()), float(df["lat"].max()), float(df["lat"].mean()))
-    long = st.sidebar.number_input("Longitude", float(df["long"].min()), float(df["long"].max()), float(df["long"].mean()))
+    # Longitude
+    min_long, max_long = float(df["long"].min()), float(df["long"].max())
+    default_long = float(df["long"].median())
+    long = st.sidebar.number_input("Longitude", min_value=min_long, max_value=max_long, value=default_long)
 
-    # Final Input Data
-    input_data = pd.DataFrame(
-        {
-            "host_identity_verified": [host_identity_verified],
-            "instant_bookable": [instant_bookable],
-            "neighbourhood group": [neighbourhood_group],
-            "neighbourhood": [neighbourhood],
-            "country": [country],
-            "cancellation_policy": [cancellation_policy],
-            "room type": [room_type],
-            "Construction year": [construction_year],
-            "service fee": [service_fee],
-            "minimum nights": [minimum_nights],
-            "number of reviews": [number_of_reviews],
-            "reviews per month": [reviews_per_month],
-            "review rate number": [review_rate_number],
-            "calculated host listings count": [calculated_host_listings_count],
-            "availability 365": [availability_365],
-            "last_review_year": [last_review_year],
-            "last_review_month": [last_review_month],
-            "lat": [lat],
-            "long": [long],
-        }
-    )
+    # Last Review Year (dropdown instead of free input)
+    last_review_year = st.sidebar.selectbox("Last Review Year", sorted(df["last_review_year"].dropna().unique()))
 
-    return input_data, model_choice
+    # Last Review Month
+    last_review_month = st.sidebar.selectbox("Last Review Month", sorted(df["last_review_month"].dropna().unique()))
 
-# -----------------------------
+    # Model Choice
+    model_choice = st.sidebar.radio("Choose Model", ("Random Forest", "XGBoost"))
+
+    # Convert Yes/No → True/False
+    host_identity_verified = True if host_identity_verified == "Yes" else False
+    instant_bookable = True if instant_bookable == "Yes" else False
+
+    # Create input DataFrame
+    data = {
+        "host_identity_verified": [host_identity_verified],
+        "instant_bookable": [instant_bookable],
+        "neighbourhood group": [neighbourhood_group],
+        "neighbourhood": [neighbourhood],
+        "country": [country],
+        "cancellation_policy": [cancellation_policy],
+        "room type": [room_type],
+        "Construction year": [construction_year],
+        "service fee": [service_fee],
+        "minimum nights": [minimum_nights],
+        "number of reviews": [number_of_reviews],
+        "reviews per month": [reviews_per_month],
+        "review rate number": [review_rate_number],
+        "calculated host listings count": [calculated_host_listings_count],
+        "availability 365": [availability_365],
+        "lat": [lat],
+        "long": [long],
+        "last_review_year": [last_review_year],
+        "last_review_month": [last_review_month],
+    }
+
+    return pd.DataFrame(data), model_choice
+
+# -------------------------------
 # Main App
-# -----------------------------
+# -------------------------------
 def main():
-    st.title("Airbnb Price Prediction App 🏡")
+    st.title("🏡 Airbnb Price Prediction App")
 
     df = load_data()
     rf_model, xgb_model = load_models()
 
     input_df, model_choice = user_input(df)
 
-    st.subheader("User Input Summary")
+    st.subheader("Your Input:")
     st.write(input_df)
 
     if st.button("Predict Price"):
@@ -151,8 +162,7 @@ def main():
         else:
             prediction = xgb_model.predict(input_df)[0]
 
-        st.success(f"💰 Predicted Price: ${prediction:.2f}")
+        st.success(f"💰 Predicted Price: ${prediction:,.2f}")
 
-# -----------------------------
 if __name__ == "__main__":
     main()
