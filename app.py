@@ -3,7 +3,6 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 import joblib
-import os
 
 st.set_page_config(page_title="Airbnb Data Explorer", layout="wide")
 
@@ -69,53 +68,49 @@ if "date" in calendarDF.columns:
     st.line_chart(trend)
 
 # -----------------------
-# ML Model Loading
+# ML Model Comparison
 # -----------------------
 st.subheader("🤖 Model Comparison")
 
-def safe_load(path):
-    if not os.path.exists(path):
-        return None
-    try:
-        return joblib.load(path)
-    except:
-        return None
+try:
+    ridge = joblib.load("ridge_regression_model.pkl")
+    rf = joblib.load("random_forest_model.pkl")
+    xgb = joblib.load("xgboost_model.pkl")
 
-models = {
-    "Ridge Regression": safe_load("ridge_regression_model.pkl"),
-    "Lasso Regression": safe_load("lasso_regression_model.pkl"),
-    "Linear Regression": safe_load("linear_regression_model.pkl"),
-    "Random Forest": safe_load("random_forest_model.pkl"),
-    "XGBoost": safe_load("xgboost_model.pkl")
-}
+    st.write("Models loaded successfully ✅")
+    st.write("- Ridge Regression")
+    st.write("- Random Forest")
+    st.write("- XGBoost")
 
-loaded_models = {name: m for name, m in models.items() if m is not None}
-
-if loaded_models:
-    st.success(f"Loaded Models: {', '.join(loaded_models.keys())}")
-else:
-    st.error("❌ No models loaded. Upload `.pkl` files.")
+except Exception:
+    st.error("Could not load models. Make sure .pkl files are uploaded.")
 
 # -----------------------
 # Prediction Form
 # -----------------------
 st.subheader("💡 Price Prediction")
 
-if loaded_models:
-    # let user choose which model
-    model_choice = st.selectbox("Choose a model", list(loaded_models.keys()))
-    model = loaded_models[model_choice]
+try:
+    model = joblib.load("ridge_regression_model.pkl")   # default model
+    feature_names = joblib.load("ridge_regression_model_features.pkl")  # load features used in training
 
+    st.write("Using Ridge Regression Model for prediction")
+
+    # Example input features
     bedrooms = st.slider("Bedrooms", 0, 10, 2)
     bathrooms = st.slider("Bathrooms", 0, 5, 1)
     accommodates = st.slider("Accommodates", 1, 16, 4)
 
+    # Build input data
     input_data = pd.DataFrame([[bedrooms, bathrooms, accommodates]],
                               columns=["bedrooms", "bathrooms", "accommodates"])
 
+    # Align with training features
+    input_data = input_data.reindex(columns=feature_names, fill_value=0)
+
     if st.button("Predict Price"):
         prediction = model.predict(input_data)[0]
-        st.success(f"💰 Predicted Price ({model_choice}): ${prediction:,.2f}")
-else:
-    st.warning("Prediction model not available. Upload your trained `.pkl` files.")
+        st.success(f"💰 Predicted Price: ${prediction:,.2f}")
 
+except Exception as e:
+    st.warning("Prediction model not available. Upload your trained .pkl and *_features.pkl files.")
