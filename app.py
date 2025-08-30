@@ -1,116 +1,81 @@
 import streamlit as st
 import pandas as pd
-import matplotlib.pyplot as plt
-import seaborn as sns
 import joblib
 
-st.set_page_config(page_title="Airbnb Data Explorer", layout="wide")
+st.set_page_config(page_title="Airbnb Price Prediction", layout="wide")
+
+st.title("🏡 Airbnb Price Prediction App")
+st.write("Switch between ML models and enter property details to predict the nightly price.")
 
 # -----------------------
-# Load Data
+# Model Selection
 # -----------------------
-@st.cache_data
-def load_data():
-    reviews = pd.read_csv("reviews.zip", compression="zip")
-    calendar = pd.read_csv("calendar.zip", compression="zip")
-    listings = pd.read_csv("listings.csv")
-    return reviews, calendar, listings
+model_choice = st.selectbox(
+    "Choose Model", 
+    ["Ridge Regression", "Random Forest", "XGBoost"]
+)
 
-reviewsDF, calendarDF, listingsDF = load_data()
-
-st.title("🏡 Airbnb Data Explorer")
-st.success("Datasets Loaded Successfully ✅")
-
-# -----------------------
-# Dataset Overview
-# -----------------------
-st.subheader("Dataset Shapes")
-st.write(f"**Reviews:** {reviewsDF.shape}")
-st.write(f"**Calendar:** {calendarDF.shape}")
-st.write(f"**Listings:** {listingsDF.shape}")
-
-# -----------------------
-# Data Preview
-# -----------------------
-st.subheader("📊 Data Samples")
-tab1, tab2, tab3 = st.tabs(["Reviews", "Calendar", "Listings"])
-with tab1:
-    st.dataframe(reviewsDF.head())
-with tab2:
-    st.dataframe(calendarDF.head())
-with tab3:
-    st.dataframe(listingsDF.head())
-
-# -----------------------
-# EDA Section
-# -----------------------
-st.subheader("📈 Exploratory Data Analysis")
-
-# Price distribution
-if "price" in listingsDF.columns:
-    st.markdown("### Price Distribution")
-    fig, ax = plt.subplots(figsize=(8,4))
-    sns.histplot(listingsDF['price'].dropna().apply(lambda x: float(str(x).replace("$","").replace(",",""))),
-                 bins=50, kde=True, ax=ax)
-    ax.set_xlabel("Price ($)")
-    st.pyplot(fig)
-
-# Room type counts
-if "room_type" in listingsDF.columns:
-    st.markdown("### Room Types")
-    st.bar_chart(listingsDF["room_type"].value_counts())
-
-# Reviews per month trend
-if "date" in calendarDF.columns:
-    st.markdown("### Availability Over Time")
-    calendarDF["date"] = pd.to_datetime(calendarDF["date"])
-    trend = calendarDF.groupby(calendarDF["date"].dt.to_period("M")).size()
-    st.line_chart(trend)
-
-# -----------------------
-# ML Model Comparison
-# -----------------------
-st.subheader("🤖 Model Comparison")
-
+# Load selected model + features
 try:
-    ridge = joblib.load("ridge_regression_model.pkl")
-    rf = joblib.load("random_forest_model.pkl")
-    xgb = joblib.load("xgboost_model.pkl")
+    if model_choice == "Ridge Regression":
+        model = joblib.load("ridge_regression_model.pkl")
+        feature_names = joblib.load("ridge_regression_model_features.pkl")
 
-    st.write("Models loaded successfully ✅")
-    st.write("- Ridge Regression")
-    st.write("- Random Forest")
-    st.write("- XGBoost")
+    elif model_choice == "Random Forest":
+        model = joblib.load("random_forest_model.pkl")
+        feature_names = joblib.load("random_forest_model_features.pkl")
+
+    elif model_choice == "XGBoost":
+        model = joblib.load("xgboost_model.pkl")
+        feature_names = joblib.load("xgboost_model_features.pkl")
+
+    st.success(f"{model_choice} loaded successfully ✅")
 
 except Exception:
-    st.error("Could not load models. Make sure .pkl files are uploaded.")
+    st.error("❌ Model or feature file not found. Please upload .pkl and *_features.pkl files.")
+    st.stop()
 
 # -----------------------
-# Prediction Form
+# Dynamic Input Form
 # -----------------------
-st.subheader("💡 Price Prediction")
+st.subheader("🔧 Enter Property Details")
 
-try:
-    model = joblib.load("ridge_regression_model.pkl")   # default model
-    feature_names = joblib.load("ridge_regression_model_features.pkl")  # load features used in training
+input_dict = {}
 
-    st.write("Using Ridge Regression Model for prediction")
+for feat in feature_names:
+    # numeric features
+    if feat in ["bedrooms", "bathrooms", "accommodates", "minimum_nights", 
+                "availability_365", "number_of_reviews", "review_scores_rating"]:
+        input_dict[feat] = st.number_input(feat, min_value=0, max_value=100, value=1)
 
-    # Example input features
-    bedrooms = st.slider("Bedrooms", 0, 10, 2)
-    bathrooms = st.slider("Bathrooms", 0, 5, 1)
-    accommodates = st.slider("Accommodates", 1, 16, 4)
+    # categorical features (OneHotEncoded)
+    elif "room_type" in feat.lower():
+        options = ["Entire home/apt", "Private room", "Shared room", "Hotel room"]
+        choice = st.selectbox("Room Type", options)
+        # one-hot encoding trick
+        for opt in options:
+            col = f"room_type_{opt}"
+            input_dict[col] = 1 if col == feat and f"room_type_{choice}" == col else 0
 
-    # Build input data
-    input_data = pd.DataFrame([[bedrooms, bathrooms, accommodates]],
-                              columns=["bedrooms", "bathrooms", "accommodates"])
+    elif "neighbourhood" in feat.lower():
+        # put some dummy options, better to load from listings.csv
+        options = ["Downtown", "Uptown", "Suburbs", "Other"]
+        choice = st.selectbox("Neighbourhood", options)
+        for opt in options:
+            col = f"neighbourhood_{opt}"
+            input_dict[col] = 1 if col == feat and f"neighbourhood_{choice}" == col else 0
 
-    # Align with training features
-    input_data = input_data.reindex(columns=feature_names, fill_value=0)
+    # everything else default to 0
+    else:
+        input_dict[feat] = 0
 
-    if st.button("Predict Price"):
-        prediction = model.predict(input_data)[0]
-        st.success(f"💰 Predicted Price: ${prediction:,.2f}")
+# Convert dict to dataframe
+input_data = pd.DataFrame([input_dict], columns=feature_names)
 
-except Exception as e:
-    st.warning("Prediction model not available. Upload your trained .pkl and *_features.pkl files.")
+# -----------------------
+# Prediction
+# -----------------------
+if st.button("💰 Predict Price"):
+    prediction = model.predict(input_data)[0]
+    st.success(f"Predicted Price: **${prediction:,.2f}**")
+
